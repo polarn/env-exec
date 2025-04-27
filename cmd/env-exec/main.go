@@ -6,16 +6,18 @@ import (
 	"log"
 	"os"
 
-	"github.com/polarn/env-exec/internal/config"
-	"github.com/polarn/env-exec/internal/utils"
-
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
+	"github.com/polarn/env-exec/internal/config"
+	"github.com/polarn/env-exec/internal/utils"
 )
 
 func main() {
+	var envVars = make(map[string]string)
+
 	config := utils.LoadConfig()
-	envVars := processEnvVars(config)
+	processEnvVars(config, &envVars)
+	processEnvVarsGCP(config, &envVars)
 
 	if len(os.Args) < 2 {
 		utils.PrintEnvVars(envVars)
@@ -25,7 +27,22 @@ func main() {
 	}
 }
 
-func processEnvVars(config *config.RootConfig) map[string]string {
+// Find only normal env vars and add them to the envVars map
+func processEnvVars(config *config.RootConfig, envVars *map[string]string) {
+	for _, env := range config.Env {
+		if env.Value != "" {
+			envVarName := utils.MakeProperEnvVarName(env.Name)
+			(*envVars)[envVarName] = env.Value
+		}
+	}
+}
+
+// Find GCP secret env vars and add them to the envVars map
+func processEnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
+	if !utils.CheckIfGCPSecretKeyRefExists(config) {
+		return
+	}
+
 	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
@@ -33,15 +50,8 @@ func processEnvVars(config *config.RootConfig) map[string]string {
 	}
 	defer client.Close()
 
-	envVars := make(map[string]string)
-
 	for _, env := range config.Env {
-		envVarName := utils.MakeProperEnvVarName(env.Name)
-		envVarValue := ""
-
-		if env.Value != "" {
-			envVarValue = env.Value
-		} else if env.ValueFrom.GCPSecretKeyRef.Name != "" {
+		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
 			name := env.ValueFrom.GCPSecretKeyRef.Name
 			version := env.ValueFrom.GCPSecretKeyRef.Version
 			project := env.ValueFrom.GCPSecretKeyRef.Project
@@ -67,10 +77,8 @@ func processEnvVars(config *config.RootConfig) map[string]string {
 				continue
 			}
 
-			envVarValue = string(resp.Payload.Data)
+			envVarName := utils.MakeProperEnvVarName(env.Name)
+			(*envVars)[envVarName] = string(resp.Payload.Data)
 		}
-
-		envVars[envVarName] = envVarValue
 	}
-	return envVars
 }
