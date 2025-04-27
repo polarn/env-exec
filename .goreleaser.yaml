@@ -51,4 +51,4 @@ brews:
 
       generate_completions_from_executable(bin/"env-exec", "completion")
     test: |
-      system "#{bin}/env-exec --version"
+      system "#{bin}/env-exec echo brew-test"

@@ -2,7 +2,21 @@
 
 A simple tool that you prefix your important command that needs some environment variables injected to work, for example when running Terraform and you need Azure secrets, etc to be able to `terraform plan`.
 
-So for example:
+## Installation
+
+For Arch Linux it's available in the AUR, so install with for example yay:
+
+```bash
+yay -S env-exec-bin
+```
+
+For Mac you can use brew:
+
+```bash
+brew install polarn/tap/env-exec
+```
+
+## Usage
 
 ```bash
 env-exec terraform plan
