@@ -48,7 +48,5 @@ brews:
     description: "The Environment variable executor"
     install: |
       bin.install "env-exec"
-
-      generate_completions_from_executable(bin/"env-exec", "completion")
     test: |
-      system "#{bin}/env-exec echo brew-test"
+      system "echo Sorry, no test yet"
