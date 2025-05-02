@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/exec"
-	"strings"
 	"syscall"
 
 	"github.com/polarn/env-exec/internal/config"
@@ -44,13 +43,6 @@ func LoadConfig() *config.RootConfig {
 		}
 	}
 	return &config
-}
-
-func MakeProperEnvVarName(name string) string {
-	replacer := strings.NewReplacer("-", "_", ".", "_")
-	properName := replacer.Replace(name)
-	properName = strings.ToUpper(properName)
-	return properName
 }
 
 func PrintEnvVars(envVars map[string]string) {

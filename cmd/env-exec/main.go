@@ -31,8 +31,7 @@ func main() {
 func processEnvVars(config *config.RootConfig, envVars *map[string]string) {
 	for _, env := range config.Env {
 		if env.Value != "" {
-			envVarName := utils.MakeProperEnvVarName(env.Name)
-			(*envVars)[envVarName] = env.Value
+			(*envVars)[env.Name] = env.Value
 		}
 	}
 }
@@ -77,8 +76,7 @@ func processEnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
 				continue
 			}
 
-			envVarName := utils.MakeProperEnvVarName(env.Name)
-			(*envVars)[envVarName] = string(resp.Payload.Data)
+			(*envVars)[env.Name] = string(resp.Payload.Data)
 		}
 	}
 }
