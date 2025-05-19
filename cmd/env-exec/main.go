@@ -13,6 +13,7 @@ func main() {
 	config := utils.LoadConfig()
 	process.EnvVars(config, &envVars)
 	process.EnvVarsGCP(config, &envVars)
+	process.EnvVarsGitlab(config, &envVars)
 
 	if len(os.Args) < 2 {
 		utils.PrintEnvVars(envVars)
