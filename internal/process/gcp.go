@@ -8,12 +8,11 @@ import (
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/polarn/env-exec/internal/config"
-	"github.com/polarn/env-exec/internal/utils"
 )
 
 // Find GCP secret env vars and add them to the envVars map
 func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
-	if !utils.CheckIfGCPSecretKeyRefExists(config) {
+	if !checkIfGCPSecretKeyRefExists(config) {
 		return
 	}
 
@@ -54,4 +53,13 @@ func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
 			(*envVars)[env.Name] = string(resp.Payload.Data)
 		}
 	}
+}
+
+func checkIfGCPSecretKeyRefExists(config *config.RootConfig) bool {
+	for _, env := range config.Env {
+		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
+			return true
+		}
+	}
+	return false
 }
