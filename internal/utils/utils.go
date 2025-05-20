@@ -61,15 +61,6 @@ func SetEnvVars(envVars map[string]string) {
 	}
 }
 
-func CheckIfGCPSecretKeyRefExists(config *config.RootConfig) bool {
-	for _, env := range config.Env {
-		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
-			return true
-		}
-	}
-	return false
-}
-
 func ExecuteCommand() error {
 	command := os.Args[1]
 	args := os.Args[2:]

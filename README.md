@@ -31,23 +31,24 @@ defaults:
   gcp:
     project: "my-gcp-project"
 env:
-  - name: ARM_TENANT_ID
-    value: "<tenant-id>"
-  - name: ARM_SUBSCRIPTION_ID
-    value: "<subscription-id>"
-  - name: ARM_CLIENT_ID
+  - name: NON_SECRET_VARIABLE
+    value: "test1"
+  - name: ANOTHER_NON_SECRET_VAR
+    value: "test2"
+  - name: VARIABLE_FROM_GCP_SECRET_MANAGER
     valueFrom:
       gcpSecretKeyRef:
-        name: azure-dev-arm-client-id
-  - name: ARM_CLIENT_SECRET
+        name: secret-in-gcp-secrets-manager
+  - name: VARIABLE_FROM_GITLAB
     valueFrom:
-      gcpSecretKeyRef:
-        name: azure-dev-arm-client-secret
+      gitlabVariableKeyRef:
+        project: 12345
+        key: key-from-gitlab-variables
 ```
 
 The GCP project can be defined as a default project, used for all secrets, but you can also define `project` inside the `gcpSecretKeyRef` as well.
 
-The YAML syntax is taken from the Kubernetes pod spec.
+The YAML syntax is inspired by the Kubernetes pod spec.
 
 If you run the tool without any arguments it will output the environment variables with `export` in front of them. The idea then is you can use it to set variables for your local shell.
 
