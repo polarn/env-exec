@@ -47,7 +47,7 @@ func LoadConfig() *config.RootConfig {
 
 func PrintEnvVars(envVars map[string]string) {
 	for key, value := range envVars {
-		fmt.Printf("export %s=\"%s\"\n", key, value)
+		fmt.Printf("export %s=%q\n", key, value)
 	}
 }
 
