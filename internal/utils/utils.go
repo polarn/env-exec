@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 
 	"github.com/polarn/env-exec/internal/config"
@@ -47,7 +48,9 @@ func LoadConfig() *config.RootConfig {
 
 func PrintEnvVars(envVars map[string]string) {
 	for key, value := range envVars {
-		fmt.Printf("export %s=%q\n", key, value)
+		// Escape single quotes in the value by replacing ' with '\''
+		escapedValue := strings.ReplaceAll(value, "'", "'\\''")
+		fmt.Printf("export %s='%s'\n", key, escapedValue)
 	}
 }
 
