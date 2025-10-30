@@ -3,7 +3,7 @@ name: Release
 on:
   push:
     tags:
-      - '*.*.*' # Trigger on new tags matching X.Y.Z
+      - "*.*.*" # Trigger on new tags matching X.Y.Z
 
 permissions:
   contents: write
@@ -21,14 +21,15 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24'
+          go-version: "1.24"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: '~> v2'
+          version: "~> v2"
           args: release --clean
         env:
           AUR_KEY: ${{ secrets.AUR_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+          APT_WEBDAV_PASSWORD: ${{ secrets.APT_WEBDAV_PASSWORD }}

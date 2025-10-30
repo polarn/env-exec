@@ -8,7 +8,7 @@ before:
     - go mod tidy
 
 builds:
-  - id: env-exec
+  - id: env-exec-binary
     binary: env-exec
     main: ./cmd/env-exec/main.go
     env:
@@ -37,22 +37,18 @@ aurs:
     private_key: "{{ .Env.AUR_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/env-exec-bin.git"
 
-brews:
+homebrew_casks:
   - name: env-exec
     repository:
       owner: polarn
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    directory: Formula
+    directory: Casks
     homepage: "https://github.com/polarn/env-exec"
     description: "The Environment variable executor"
-    install: |
-      bin.install "env-exec"
-    test: |
-      system "echo Sorry, no test yet"
 
 nfpms:
-  - id: env-exec
+  - id: env-exec-packages
     package_name: env-exec
 
     formats:
@@ -64,3 +60,18 @@ nfpms:
     maintainer: Marcus Johansson <polarn@polarn.net>
     description: "A tool to inject environment variables from various sources (GCP Secrets Manager, GitLab) before executing commands"
     license: Apache-2.0
+
+publishers:
+  - name: apt-repo-webdav
+    ids:
+      - env-exec-packages
+    cmd: |
+      if [[ "{{ .ArtifactPath }}" == *.deb ]]; then
+        curl -T {{ .ArtifactPath }} \
+          -u apt:{{ .Env.APT_WEBDAV_PASSWORD }} \
+          https://webdav.polarn.net/apt/$(basename {{ .ArtifactPath }})
+      else
+        echo "Skipping non-deb file: {{ .ArtifactPath }}"
+      fi
+    env:
+      - APT_WEBDAV_PASSWORD
