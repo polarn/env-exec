@@ -23,11 +23,17 @@ type GitlabProvider struct{}
 
 func (p *GitlabProvider) Name() string { return "gitlab" }
 
+// GithubProvider provides environment variables from GitHub Actions variables.
+type GithubProvider struct{}
+
+func (p *GithubProvider) Name() string { return "github" }
+
 // AllProviders returns all available providers in execution order.
 func AllProviders() []Provider {
 	return []Provider{
 		&PlainProvider{},
 		&GCPProvider{},
 		&GitlabProvider{},
+		&GithubProvider{},
 	}
 }

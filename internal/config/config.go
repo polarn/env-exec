@@ -9,6 +9,12 @@ type EnvConfig struct {
 type ValueFrom struct {
 	GCPSecretKeyRef      GCPSecretKeyRef      `yaml:"gcpSecretKeyRef"`
 	GitlabVariableKeyRef GitlabVariableKeyRef `yaml:"gitlabVariableKeyRef"`
+	GithubVariableKeyRef GithubVariableKeyRef `yaml:"githubVariableKeyRef"`
+}
+
+type GithubVariableKeyRef struct {
+	Repo string `yaml:"repo"`
+	Name string `yaml:"name"`
 }
 
 type GCPSecretKeyRef struct {
@@ -23,11 +29,16 @@ type GitlabVariableKeyRef struct {
 }
 
 type DefaultsConfig struct {
-	GCP GCPDefaults `yaml:"gcp"`
+	GCP    GCPDefaults    `yaml:"gcp"`
+	Github GithubDefaults `yaml:"github"`
 }
 
 type GCPDefaults struct {
 	Project string `yaml:"project"`
+}
+
+type GithubDefaults struct {
+	Repo string `yaml:"repo"`
 }
 
 type RootConfig struct {

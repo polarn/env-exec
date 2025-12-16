@@ -29,7 +29,8 @@ func Validate(cfg *RootConfig) error {
 		hasValue := env.Value != ""
 		hasGCP := env.ValueFrom.GCPSecretKeyRef.Name != ""
 		hasGitlab := env.ValueFrom.GitlabVariableKeyRef.Key != ""
-		hasValueFrom := hasGCP || hasGitlab
+		hasGithub := env.ValueFrom.GithubVariableKeyRef.Name != ""
+		hasValueFrom := hasGCP || hasGitlab || hasGithub
 
 		if !hasValue && !hasValueFrom {
 			return fmt.Errorf("%s: must have value or valueFrom", prefix)
@@ -55,6 +56,14 @@ func Validate(cfg *RootConfig) error {
 			if env.ValueFrom.GitlabVariableKeyRef.Project == "" {
 				return fmt.Errorf("%s: gitlabVariableKeyRef.project is required", prefix)
 			}
+		}
+
+		// Validate GitHub variable ref
+		if hasGithub {
+			if env.ValueFrom.GithubVariableKeyRef.Name == "" {
+				return fmt.Errorf("%s: githubVariableKeyRef.name is required", prefix)
+			}
+			// repo is optional if defaults.github.repo is set (checked at runtime)
 		}
 	}
 

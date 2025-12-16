@@ -78,6 +78,13 @@ env:
       gitlabVariableKeyRef:
         project: "12345"
         key: deploy-token
+
+  # GitHub Actions Variables
+  - name: MY_SECRET
+    valueFrom:
+      githubVariableKeyRef:
+        repo: "owner/repo"  # optional if defaults.github.repo is set
+        name: my-variable
 ```
 
 The syntax is inspired by Kubernetes pod specs.
@@ -107,6 +114,26 @@ env-exec terraform plan
 
 - `project` - GitLab project ID (required)
 - `key` - Variable key (required)
+
+### GitHub Actions Variables
+
+Fetches repository variables from GitHub Actions. Requires `GITHUB_TOKEN` environment variable with `repo` scope.
+
+```bash
+export GITHUB_TOKEN=ghp_xxxx
+env-exec terraform plan
+```
+
+- `repo` - GitHub repository in `owner/repo` format (optional if `defaults.github.repo` is set)
+- `name` - Variable name (required)
+
+You can set a default repo in your config:
+
+```yaml
+defaults:
+  github:
+    repo: "owner/repo"
+```
 
 ## License
 
