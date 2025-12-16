@@ -38,6 +38,7 @@ Examples:
 }
 
 func main() {
+	log.SetFlags(0)
 	args := os.Args[1:]
 	dryRun := false
 
@@ -62,6 +63,10 @@ done:
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
+	}
+
+	if err := config.Validate(cfg); err != nil {
+		log.Fatalf("Error: config: %v", err)
 	}
 
 	envVars := make(map[string]string)
