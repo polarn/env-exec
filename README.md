@@ -1,19 +1,23 @@
 # env-exec
 
-A simple tool that you prefix your important command that needs some environment variables injected to work, for example when running Terraform and you need Azure secrets, etc to be able to `terraform plan`.
+A CLI tool that injects environment variables from various sources before executing a command. Useful for running commands that need secrets, such as `terraform plan` with cloud credentials.
 
 ## Installation
 
-For Arch Linux it's available in the AUR, so install with for example yay:
-
+**Arch Linux (AUR):**
 ```bash
 yay -S env-exec-bin
 ```
 
-For Mac you can use brew:
-
+**macOS (Homebrew):**
 ```bash
 brew install polarn/tap/env-exec
+```
+
+**Debian/Ubuntu:**
+```bash
+# Download from releases or use the apt repository
+sudo dpkg -i env-exec_*.deb
 ```
 
 ## Usage
@@ -22,36 +26,88 @@ brew install polarn/tap/env-exec
 env-exec terraform plan
 ```
 
-would run `terraform plan`, but before running, `env-exec` will read a file called `.env-exec.yaml` in the same folder which will define environment variables. These variables can be static or they can be fetched from GCP Secrets Manager, which is actually the main use case for the tool.
+This runs `terraform plan` with environment variables injected from `.env-exec.yaml` in the current directory.
 
-The configuration file can look like this:
+### CLI Flags
+
+```
+-h, --help      Show help
+-v, --version   Show version
+-n, --dry-run   Print environment variables without executing command
+```
+
+### Export to Shell
+
+Run without arguments to output `export` statements:
+
+```bash
+source <(env-exec)
+```
+
+### Custom Config Path
+
+```bash
+ENV_EXEC_YAML=/path/to/config.yaml env-exec terraform plan
+```
+
+## Configuration
+
+Create a `.env-exec.yaml` file:
 
 ```yaml
 defaults:
   gcp:
     project: "my-gcp-project"
+
 env:
-  - name: NON_SECRET_VARIABLE
-    value: "test1"
-  - name: ANOTHER_NON_SECRET_VAR
-    value: "test2"
-  - name: VARIABLE_FROM_GCP_SECRET_MANAGER
+  # Plain values
+  - name: MY_VAR
+    value: "static-value"
+
+  # GCP Secret Manager
+  - name: DB_PASSWORD
     valueFrom:
       gcpSecretKeyRef:
-        name: secret-in-gcp-secrets-manager
-  - name: VARIABLE_FROM_GITLAB
+        name: database-password
+        version: latest  # optional, defaults to "latest"
+        project: other-project  # optional, overrides default
+
+  # GitLab CI/CD Variables
+  - name: DEPLOY_TOKEN
     valueFrom:
       gitlabVariableKeyRef:
-        project: 12345
-        key: key-from-gitlab-variables
+        project: "12345"
+        key: deploy-token
 ```
 
-The GCP project can be defined as a default project, used for all secrets, but you can also define `project` inside the `gcpSecretKeyRef` as well.
+The syntax is inspired by Kubernetes pod specs.
 
-The YAML syntax is inspired by the Kubernetes pod spec.
+## Providers
 
-If you run the tool without any arguments it will output the environment variables with `export` in front of them. The idea then is you can use it to set variables for your local shell.
+### Plain Values
+
+Static key-value pairs defined directly in the config.
+
+### GCP Secret Manager
+
+Fetches secrets from Google Cloud Secret Manager. Requires GCP credentials (e.g., `gcloud auth application-default login`).
+
+- `name` - Secret name (required)
+- `version` - Secret version (optional, defaults to `latest`)
+- `project` - GCP project (optional if `defaults.gcp.project` is set)
+
+### GitLab CI/CD Variables
+
+Fetches project variables from GitLab. Requires `GITLAB_TOKEN` environment variable with API access.
 
 ```bash
-source <(env-exec)
+export GITLAB_TOKEN=glpat-xxxx
+env-exec terraform plan
 ```
+
+- `project` - GitLab project ID (required)
+- `key` - Variable key (required)
+
+## License
+
+Apache-2.0
