@@ -90,5 +90,5 @@ func ExecuteCommand() error {
 			os.Exit(1)
 		}
 	}
-	return cmd.Run()
+	return nil
 }
