@@ -1,4 +1,4 @@
-package process
+package provider
 
 import (
 	"encoding/json"
@@ -20,8 +20,9 @@ type GitlabVariable struct {
 	EnvironmentScope string `json:"environment_scope"`
 }
 
-func EnvVarsGitlab(config *config.RootConfig, envVars *map[string]string) {
-	if !checkIfGitlabVariableKeyRefExists(config) {
+// Provide fetches GitLab variables and adds them to the envVars map.
+func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]string) {
+	if !hasGitlabVariables(cfg) {
 		return
 	}
 
@@ -30,7 +31,7 @@ func EnvVarsGitlab(config *config.RootConfig, envVars *map[string]string) {
 		log.Fatal("GITLAB_TOKEN environment variable not set")
 	}
 
-	for _, env := range config.Env {
+	for _, env := range cfg.Env {
 		if env.ValueFrom.GitlabVariableKeyRef.Key != "" {
 			key := env.ValueFrom.GitlabVariableKeyRef.Key
 			project := env.ValueFrom.GitlabVariableKeyRef.Project
@@ -46,13 +47,13 @@ func EnvVarsGitlab(config *config.RootConfig, envVars *map[string]string) {
 				continue
 			}
 
-			(*envVars)[env.Name] = value
+			envVars[env.Name] = value
 		}
 	}
 }
 
-func checkIfGitlabVariableKeyRefExists(config *config.RootConfig) bool {
-	for _, env := range config.Env {
+func hasGitlabVariables(cfg *config.RootConfig) bool {
+	for _, env := range cfg.Env {
 		if env.ValueFrom.GitlabVariableKeyRef.Key != "" {
 			return true
 		}

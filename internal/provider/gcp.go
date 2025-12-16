@@ -1,4 +1,4 @@
-package process
+package provider
 
 import (
 	"context"
@@ -10,9 +10,9 @@ import (
 	"github.com/polarn/env-exec/internal/config"
 )
 
-// Find GCP secret env vars and add them to the envVars map
-func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
-	if !checkIfGCPSecretKeyRefExists(config) {
+// Provide fetches GCP secrets and adds them to the envVars map.
+func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string) {
+	if !hasGCPSecrets(cfg) {
 		return
 	}
 
@@ -23,7 +23,7 @@ func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
 	}
 	defer client.Close()
 
-	for _, env := range config.Env {
+	for _, env := range cfg.Env {
 		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
 			name := env.ValueFrom.GCPSecretKeyRef.Name
 			version := env.ValueFrom.GCPSecretKeyRef.Version
@@ -33,11 +33,11 @@ func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
 				version = "latest"
 			}
 
-			if project == "" && config.Defaults.GCP.Project == "" {
+			if project == "" && cfg.Defaults.GCP.Project == "" {
 				log.Printf("Error: No GCP project found for secret '%s'", env.Name)
 				continue
 			} else if project == "" {
-				project = config.Defaults.GCP.Project
+				project = cfg.Defaults.GCP.Project
 			}
 
 			reqName := fmt.Sprintf("projects/%s/secrets/%s/versions/%s", project, name, version)
@@ -50,13 +50,13 @@ func EnvVarsGCP(config *config.RootConfig, envVars *map[string]string) {
 				continue
 			}
 
-			(*envVars)[env.Name] = string(resp.Payload.Data)
+			envVars[env.Name] = string(resp.Payload.Data)
 		}
 	}
 }
 
-func checkIfGCPSecretKeyRefExists(config *config.RootConfig) bool {
-	for _, env := range config.Env {
+func hasGCPSecrets(cfg *config.RootConfig) bool {
+	for _, env := range cfg.Env {
 		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
 			return true
 		}
