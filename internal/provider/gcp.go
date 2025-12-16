@@ -11,15 +11,15 @@ import (
 )
 
 // Provide fetches GCP secrets and adds them to the envVars map.
-func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string) {
+func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
 	if !hasGCPSecrets(cfg) {
-		return
+		return nil
 	}
 
 	ctx := context.Background()
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		log.Fatalf("Failed to create Secret Manager client: %v", err)
+		return fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
 	defer client.Close()
 
@@ -34,7 +34,7 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 			}
 
 			if project == "" && cfg.Defaults.GCP.Project == "" {
-				log.Printf("Error: No GCP project found for secret '%s'", env.Name)
+				log.Printf("Warning: No GCP project found for secret '%s', skipping", env.Name)
 				continue
 			} else if project == "" {
 				project = cfg.Defaults.GCP.Project
@@ -46,13 +46,14 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 				Name: reqName,
 			})
 			if err != nil {
-				log.Printf("Error accessing GCP secret '%s' version '%s': %v", name, version, err)
+				log.Printf("Warning: Failed to access GCP secret '%s' version '%s': %v", name, version, err)
 				continue
 			}
 
 			envVars[env.Name] = string(resp.Payload.Data)
 		}
 	}
+	return nil
 }
 
 func hasGCPSecrets(cfg *config.RootConfig) bool {

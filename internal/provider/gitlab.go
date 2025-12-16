@@ -21,14 +21,14 @@ type GitlabVariable struct {
 }
 
 // Provide fetches GitLab variables and adds them to the envVars map.
-func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]string) {
+func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
 	if !hasGitlabVariables(cfg) {
-		return
+		return nil
 	}
 
 	gitlabToken := os.Getenv("GITLAB_TOKEN")
 	if gitlabToken == "" {
-		log.Fatal("GITLAB_TOKEN environment variable not set")
+		return fmt.Errorf("GITLAB_TOKEN environment variable not set")
 	}
 
 	for _, env := range cfg.Env {
@@ -37,19 +37,20 @@ func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]stri
 			project := env.ValueFrom.GitlabVariableKeyRef.Project
 
 			if project == "" {
-				log.Printf("Error: No GitLab project found for variable '%s'", env.Name)
+				log.Printf("Warning: No GitLab project found for variable '%s', skipping", env.Name)
 				continue
 			}
 
 			value, err := getGitlabVariable(gitlabToken, key, project)
 			if err != nil {
-				log.Printf("Error getting GitLab variable '%s': %v", key, err)
+				log.Printf("Warning: Failed to get GitLab variable '%s': %v", key, err)
 				continue
 			}
 
 			envVars[env.Name] = value
 		}
 	}
+	return nil
 }
 
 func hasGitlabVariables(cfg *config.RootConfig) bool {
@@ -62,12 +63,11 @@ func hasGitlabVariables(cfg *config.RootConfig) bool {
 }
 
 func getGitlabVariable(gitlabToken, key, project string) (string, error) {
-
 	apiURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s/variables/%s", project, key)
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
-		log.Fatalf("Failed to create request: %v", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 
 	req.Header.Set("PRIVATE-TOKEN", gitlabToken)

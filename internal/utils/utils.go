@@ -2,7 +2,6 @@ package utils
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,7 +11,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func LoadConfigFile() []byte {
+func LoadConfigFile() ([]byte, error) {
 	filename := ".env-exec.yaml"
 	if os.Getenv("ENV_EXEC_YAML") != "" {
 		filename = os.Getenv("ENV_EXEC_YAML")
@@ -22,28 +21,26 @@ func LoadConfigFile() []byte {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// This is OK, means we will not expose any variables
-			return nil
-		} else if os.IsPermission(err) {
-			log.Fatalf("Specific error: Permission denied to read file '%s'.\n", filename)
-		} else {
-			log.Fatalf("Specific error: An unexpected error occurred while reading file '%s'.\n", filename)
+			return nil, nil
 		}
-		return nil
+		return nil, fmt.Errorf("failed to read config file '%s': %w", filename, err)
 	}
-	return data
+	return data, nil
 }
 
-func LoadConfig() *config.RootConfig {
-	var config config.RootConfig
+func LoadConfig() (*config.RootConfig, error) {
+	var cfg config.RootConfig
 
-	data := LoadConfigFile()
+	data, err := LoadConfigFile()
+	if err != nil {
+		return nil, err
+	}
 	if data != nil {
-		err := yaml.Unmarshal(data, &config)
-		if err != nil {
-			log.Fatalf("Error unmarshalling YAML: %v", err)
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config: %w", err)
 		}
 	}
-	return &config
+	return &cfg, nil
 }
 
 func PrintEnvVars(envVars map[string]string) {
@@ -54,14 +51,13 @@ func PrintEnvVars(envVars map[string]string) {
 	}
 }
 
-func SetEnvVars(envVars map[string]string) {
+func SetEnvVars(envVars map[string]string) error {
 	for key, value := range envVars {
-		err := os.Setenv(key, value)
-		if err != nil {
-			fmt.Println("Error setting environment variable:", err)
-			return
+		if err := os.Setenv(key, value); err != nil {
+			return fmt.Errorf("failed to set environment variable '%s': %w", key, err)
 		}
 	}
+	return nil
 }
 
 func ExecuteCommand() error {
@@ -69,26 +65,17 @@ func ExecuteCommand() error {
 	args := os.Args[2:]
 
 	cmd := exec.Command(command, args...)
-
-	// Set the standard input, output, and error streams to the current process's
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
-	if err != nil {
-		// If the command exited with a non-zero status, the error will be of type *exec.ExitError
+	if err := cmd.Run(); err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
 			if status, ok := exitError.Sys().(syscall.WaitStatus); ok {
-				fmt.Printf("Command exited with status: %d\n", status.ExitStatus())
-			} else {
-				fmt.Printf("Command failed: %v\n", err)
+				os.Exit(status.ExitStatus())
 			}
-			os.Exit(1)
-		} else {
-			fmt.Printf("Failed to run command: %v\n", err)
-			os.Exit(1)
 		}
+		return fmt.Errorf("failed to run command: %w", err)
 	}
 	return nil
 }

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"os"
 
 	"github.com/polarn/env-exec/internal/provider"
@@ -8,17 +9,26 @@ import (
 )
 
 func main() {
-	envVars := make(map[string]string)
-	config := utils.LoadConfig()
+	config, err := utils.LoadConfig()
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
+	envVars := make(map[string]string)
 	for _, p := range provider.AllProviders() {
-		p.Provide(config, envVars)
+		if err := p.Provide(config, envVars); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
 	}
 
 	if len(os.Args) < 2 {
 		utils.PrintEnvVars(envVars)
 	} else {
-		utils.SetEnvVars(envVars)
-		utils.ExecuteCommand()
+		if err := utils.SetEnvVars(envVars); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
+		if err := utils.ExecuteCommand(); err != nil {
+			log.Fatalf("Error: %v", err)
+		}
 	}
 }
