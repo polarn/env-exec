@@ -43,7 +43,7 @@ done:
 	envVars := make(map[string]string)
 	for _, p := range provider.AllProviders() {
 		if err := p.Provide(cfg, envVars); err != nil {
-			log.Fatalf("Error: %v", err)
+			log.Fatalf("Error: %s: %v", p.Name(), err)
 		}
 	}
 
