@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -10,7 +11,30 @@ import (
 	"github.com/polarn/env-exec/internal/provider"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+)
+
 func main() {
+	args := os.Args[1:]
+	dryRun := false
+
+	// Parse flags
+	for len(args) > 0 {
+		switch args[0] {
+		case "--version", "-v":
+			fmt.Printf("env-exec %s (%s)\n", version, commit)
+			return
+		case "--dry-run", "-n":
+			dryRun = true
+			args = args[1:]
+		default:
+			goto done
+		}
+	}
+done:
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -23,13 +47,13 @@ func main() {
 		}
 	}
 
-	if len(os.Args) < 2 {
+	if len(args) == 0 || dryRun {
 		env.Print(envVars)
 	} else {
 		if err := env.Set(envVars); err != nil {
 			log.Fatalf("Error: %v", err)
 		}
-		if err := exec.Run(os.Args[1:]); err != nil {
+		if err := exec.Run(args); err != nil {
 			log.Fatalf("Error: %v", err)
 		}
 	}

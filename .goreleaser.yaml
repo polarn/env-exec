@@ -16,6 +16,10 @@ builds:
     goos:
       - linux
       - darwin
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.ShortCommit}}
 
 archives:
   - formats: [tar.gz]
