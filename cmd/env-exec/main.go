@@ -16,6 +16,27 @@ var (
 	commit  = "none"
 )
 
+func printUsage() {
+	fmt.Print(`Usage: env-exec [OPTIONS] [COMMAND] [ARGS...]
+
+Inject environment variables from various sources before executing a command.
+
+Options:
+  -h, --help      Show this help message
+  -v, --version   Show version information
+  -n, --dry-run   Print environment variables without executing command
+
+Environment:
+  ENV_EXEC_YAML   Path to config file (default: .env-exec.yaml)
+  GITLAB_TOKEN    GitLab API token (required for GitLab variables)
+
+Examples:
+  env-exec terraform plan       Run terraform with injected env vars
+  env-exec --dry-run            Print env vars that would be set
+  source <(env-exec)            Export env vars to current shell
+`)
+}
+
 func main() {
 	args := os.Args[1:]
 	dryRun := false
@@ -23,6 +44,9 @@ func main() {
 	// Parse flags
 	for len(args) > 0 {
 		switch args[0] {
+		case "--help", "-h":
+			printUsage()
+			return
 		case "--version", "-v":
 			fmt.Printf("env-exec %s (%s)\n", version, commit)
 			return
