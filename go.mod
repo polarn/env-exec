@@ -1,6 +1,6 @@
 module github.com/polarn/env-exec
 
-go 1.24.2
+go 1.26
 
 require (
 	cloud.google.com/go/secretmanager v1.14.7
