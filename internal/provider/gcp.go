@@ -10,6 +10,31 @@ import (
 	"github.com/polarn/env-exec/internal/config"
 )
 
+type secretAccessor interface {
+	AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest) (*secretmanagerpb.AccessSecretVersionResponse, error)
+	Close() error
+}
+
+type secretManagerClient struct {
+	client *secretmanager.Client
+}
+
+func (c *secretManagerClient) AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest) (*secretmanagerpb.AccessSecretVersionResponse, error) {
+	return c.client.AccessSecretVersion(ctx, req)
+}
+
+func (c *secretManagerClient) Close() error {
+	return c.client.Close()
+}
+
+var newSecretAccessor = func(ctx context.Context) (secretAccessor, error) {
+	client, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &secretManagerClient{client: client}, nil
+}
+
 // Provide fetches GCP secrets and adds them to the envVars map.
 func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
 	if !hasGCPSecrets(cfg) {
@@ -17,7 +42,7 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 	}
 
 	ctx := context.Background()
-	client, err := secretmanager.NewClient(ctx)
+	client, err := newSecretAccessor(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
