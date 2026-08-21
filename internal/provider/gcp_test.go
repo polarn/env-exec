@@ -18,6 +18,7 @@ import (
 type fakeSecretClient struct {
 	secrets   map[string]string
 	errs      map[string]error
+	noPayload map[string]bool
 	requested []string
 	closed    bool
 }
@@ -28,6 +29,10 @@ func (f *fakeSecretClient) AccessSecretVersion(ctx context.Context, req *secretm
 
 	if err, ok := f.errs[name]; ok {
 		return nil, err
+	}
+
+	if f.noPayload[name] {
+		return &secretmanagerpb.AccessSecretVersionResponse{Name: name}, nil
 	}
 
 	value, ok := f.secrets[name]
@@ -98,6 +103,7 @@ func TestGCPProvider_Provide(t *testing.T) {
 		config        *config.RootConfig
 		secrets       map[string]string
 		errs          map[string]error
+		noPayload     map[string]bool
 		existing      map[string]string
 		want          map[string]string
 		wantRequested []string
@@ -206,6 +212,29 @@ func TestGCPProvider_Provide(t *testing.T) {
 			wantRequested: []string{"projects/proj/secrets/blank/versions/latest"},
 		},
 		{
+			name:          "response without payload is skipped",
+			config:        &config.RootConfig{Env: []config.EnvConfig{gcpEnv("TOKEN", "proj", "api-token", "")}},
+			noPayload:     map[string]bool{"projects/proj/secrets/api-token/versions/latest": true},
+			want:          map[string]string{},
+			wantRequested: []string{"projects/proj/secrets/api-token/versions/latest"},
+			wantLog:       "Warning: GCP secret 'api-token' version 'latest' returned no payload, skipping",
+		},
+		{
+			name: "missing payload skips only that secret",
+			config: &config.RootConfig{Env: []config.EnvConfig{
+				gcpEnv("EMPTY", "proj", "no-payload", "7"),
+				gcpEnv("TOKEN", "proj", "api-token", ""),
+			}},
+			secrets:   map[string]string{"projects/proj/secrets/api-token/versions/latest": "s3cret"},
+			noPayload: map[string]bool{"projects/proj/secrets/no-payload/versions/7": true},
+			want:      map[string]string{"TOKEN": "s3cret"},
+			wantRequested: []string{
+				"projects/proj/secrets/no-payload/versions/7",
+				"projects/proj/secrets/api-token/versions/latest",
+			},
+			wantLog: "Warning: GCP secret 'no-payload' version '7' returned no payload, skipping",
+		},
+		{
 			name: "multiple secrets fetched in config order",
 			config: &config.RootConfig{
 				Defaults: config.DefaultsConfig{GCP: config.GCPDefaults{Project: "proj"}},
@@ -228,7 +257,7 @@ func TestGCPProvider_Provide(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := &fakeSecretClient{secrets: tt.secrets, errs: tt.errs}
+			client := &fakeSecretClient{secrets: tt.secrets, errs: tt.errs, noPayload: tt.noPayload}
 			installSecretAccessor(t, client, nil)
 			logged := captureLog(t)
 

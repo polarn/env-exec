@@ -75,7 +75,12 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 				continue
 			}
 
-			envVars[env.Name] = string(resp.Payload.Data)
+			if resp.GetPayload() == nil {
+				log.Printf("Warning: GCP secret '%s' version '%s' returned no payload, skipping", name, version)
+				continue
+			}
+
+			envVars[env.Name] = string(resp.GetPayload().GetData())
 		}
 	}
 	return nil
