@@ -40,6 +40,10 @@ aurs:
     license: Apache-2.0
     private_key: "{{ .Env.AUR_KEY }}"
     git_url: "ssh://aur@aur.archlinux.org/env-exec-bin.git"
+    homepage: "https://github.com/polarn/env-exec"
+    description: "A tool to inject environment variables from various sources (GCP Secrets Manager, GitLab) before executing commands"
+    maintainers:
+      - "Marcus Johansson <polarn@polarn.net>"
 
 homebrew_casks:
   - name: env-exec
