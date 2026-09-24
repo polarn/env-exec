@@ -66,6 +66,21 @@ func TestLoad(t *testing.T) {
 			},
 		},
 		{
+			name: "asFile",
+			content: `env:
+  - name: KEY_PATH
+    asFile: true
+    value: secret
+  - name: PLAIN
+    value: plain`,
+			wantEnvLen: 2,
+			check: func(t *testing.T, cfg *RootConfig) {
+				if !cfg.Env[0].AsFile || cfg.Env[1].AsFile {
+					t.Errorf("got %+v", cfg.Env)
+				}
+			},
+		},
+		{
 			name:       "empty file",
 			content:    "",
 			wantEnvLen: 0,

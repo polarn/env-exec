@@ -27,5 +27,5 @@ go.work.sum
 # Added by goreleaser init:
 dist/
 
-env-exec
+/env-exec
 

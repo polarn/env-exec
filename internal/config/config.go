@@ -4,6 +4,7 @@ type EnvConfig struct {
 	Name      string    `yaml:"name"`
 	Value     string    `yaml:"value"`
 	ValueFrom ValueFrom `yaml:"valueFrom"`
+	AsFile    bool      `yaml:"asFile"`
 }
 
 type ValueFrom struct {
@@ -33,4 +34,14 @@ type GCPDefaults struct {
 type RootConfig struct {
 	Defaults DefaultsConfig `yaml:"defaults"`
 	Env      []EnvConfig    `yaml:"env"`
+}
+
+func (c *RootConfig) FileVars() []string {
+	var names []string
+	for _, env := range c.Env {
+		if env.AsFile {
+			names = append(names, env.Name)
+		}
+	}
+	return names
 }

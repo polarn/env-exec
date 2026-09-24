@@ -78,9 +78,25 @@ env:
       gitlabVariableKeyRef:
         project: "12345"
         key: deploy-token
+
+  # Written to a file; the variable holds the file's path
+  - name: GOOGLE_APPLICATION_CREDENTIALS
+    asFile: true
+    valueFrom:
+      gcpSecretKeyRef:
+        name: service-account-key
 ```
 
 The syntax is inspired by Kubernetes pod specs.
+
+### File-backed Variables
+
+Some tools take a *path* to a secret rather than the secret itself (a private key, a service account key, a kubeconfig). Set `asFile: true` on any entry, whatever its source, and env-exec writes the value to a file and sets the variable to that file's path.
+
+- The file is `0600`, in a private `0700` directory under `$XDG_RUNTIME_DIR` (usually a per-user tmpfs), or the system temp directory when that is unset. It is named after the variable.
+- The directory is removed when the command exits, including after Ctrl-C or `SIGTERM`. Only `SIGKILL` or a crash leaves it behind.
+- Export mode (`source <(env-exec)`) rejects `asFile` entries, because no command runs whose exit could trigger the cleanup.
+- `--dry-run` prints `<file>` in place of the path and writes nothing.
 
 ## Providers
 
