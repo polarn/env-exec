@@ -47,5 +47,5 @@ Files are named after the variable with no extension. No known tool checks it (G
 - **Provider registry / non-empty provider structs** — three providers whose order defines precedence; provider config already flows through `cfg.Defaults`.
 - **Enable/disable providers** — a provider already runs only when an entry references it.
 - **Templating in values** — the shell does it. If a concrete need appears, `${VAR}` via `os.Expand` over the resolved map, not Go templates.
-- **`defer os.Unsetenv` in a test loop** (`env_test.go:96-98`) — correct as written; defers run at subtest end.
+- **`defer os.Unsetenv` in a test loop** (`env_test.go:101-103`) — correct as written; defers run at subtest end.
 - **`GITLAB_TOKEN` visible in the process environment** — it is the user's own input, not a code change. The child inherits it on purpose.
