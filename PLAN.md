@@ -24,9 +24,6 @@
 - `gitlab.go:14-21`: `GitlabVariable` is only used in `getGitlabVariable` and four of its fields are unused; make it local and drop them.
 - `gitlab.go:84`: the ignored error on the error-body read loses only the body text (the status is already in the message). Fix in passing or leave.
 
-### 4. Test hygiene
-- `internal/env/env_test.go:11-24`: `captureStdout` must `defer` the `os.Stdout` restore, or a panic breaks every later test. The copy in `cmd/env-exec/main_test.go` already does.
-
 ## Optional, on demand
 
 ### 5. `-c` / `--config` flag

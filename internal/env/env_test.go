@@ -8,15 +8,20 @@ import (
 	"testing"
 )
 
-func captureStdout(f func()) string {
+func captureStdout(t *testing.T, f func()) string {
+	t.Helper()
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
 	old := os.Stdout
-	r, w, _ := os.Pipe()
 	os.Stdout = w
+	defer func() { os.Stdout = old }()
 
 	f()
 
 	w.Close()
-	os.Stdout = old
 
 	var buf bytes.Buffer
 	io.Copy(&buf, r)
@@ -64,7 +69,7 @@ func TestPrint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output := captureStdout(func() { Print(tt.envVars) })
+			output := captureStdout(t, func() { Print(tt.envVars) })
 
 			if tt.exact != "" {
 				if output != tt.exact {
@@ -107,5 +112,28 @@ func TestSet(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCaptureStdout_RestoresOnPanic(t *testing.T) {
+	old := os.Stdout
+	defer func() {
+		if os.Stdout != old {
+			t.Errorf("want os.Stdout restored to %v, got %v", old, os.Stdout)
+			os.Stdout = old
+		}
+	}()
+
+	func() {
+		defer func() {
+			_ = recover()
+		}()
+		captureStdout(t, func() {
+			panic("boom")
+		})
+	}()
+
+	if os.Stdout != old {
+		t.Errorf("want os.Stdout restored to %v, got %v", old, os.Stdout)
 	}
 }
