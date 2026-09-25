@@ -1,154 +1,60 @@
 # PLAN.md
 
-## Bugs
+## Now
 
-### 1. Wrong precedence warning text
-- **File**: `internal/config/validation.go:40`
-- **Issue**: Warning says "value takes precedence" but `valueFrom` actually wins. Providers run `plain` → `gcp` → `gitlab` (`provider.go:28-32`); `plain.go:9` writes `value` first, then `gcp.go:83` / `gitlab.go:50` overwrite the same map key. Following the suggestion to "document that value always overrides valueFrom" would enshrine the opposite of runtime behavior.
-- **Fix**: Correct the warning text to say "valueFrom takes precedence", or make it an error if both are set.
+### 1. Release 1.1.1
+- `main` has grpc 1.83.2 (PRs #14 and #18), which closes the three Dependabot alerts. The 1.1.0 tarballs still carry 1.82.1.
+- env-exec is only a gRPC client, so the advisories (xDS server DoS, HTTP/2 OOM) never applied at runtime; the release is for scanners and package repos.
 
-### 2. Dead code — uncheckable GCP name
-- **File**: `internal/config/validation.go:44-47`
-- **Issue**: `hasGCP` is `GCPSecretKeyRef.Name != ""`, so the inner check `if env.ValueFrom.GCPSecretKeyRef.Name == ""` can never fire.
-- **Fix**: Remove the dead code.
+## Do
 
-### 3. HTTP client with no timeout
-- **File**: `internal/provider/gitlab.go:75`
-- **Issue**: `http.Client{}` has zero timeout. If the GitLab API is slow or unresponsive, the request hangs indefinitely.
-- **Fix**: Add a `Timeout` (e.g., 30s).
-
-### 4. No context deadline on GCP calls
-- **File**: `internal/provider/gcp.go:44`
-- **Issue**: `context.Background()` with no deadline — hung GCP API calls block forever.
-- **Fix**: Use `context.WithTimeout` or pass a context through the provider.
-
-### 5. Silent skip on unresolvable GCP secrets
-- **File**: `internal/provider/gcp.go:61-81`
-- **Issue**: A missing project, a fetch failure or an empty payload logs a warning and `continue`s. The user's command fails with a confusing "missing env var" error and the real cause may be scrolled off screen.
-- **Fix**: Make fetch failures fatal (return error), or at minimum buffer all warnings and print them once before execution.
-
-### 6. Same silent-skip for GitLab variables
-- **File**: `internal/provider/gitlab.go:45-47`
-- **Issue**: Identical pattern to Bug 5.
-- **Fix**: Same fix as Bug 5.
-
-### 7. `captureStdout` does not restore `os.Stdout` on panic
-- **File**: `internal/env/env_test.go:11-24`
-- **Issue**: If the test function panics, `os.Stdout` is never restored, causing cascading failures in subsequent tests.
-- **Fix**: Use `defer func() { os.Stdout = old }()` after saving the original.
-
-### 8. Duplicate env var names only produce a warning
-- **File**: `internal/config/validation.go:23-26`
-- **Issue**: Duplicate names silently overwrite the first value ("last wins"). Missing names are a hard error — this is inconsistent.
-- **Fix**: Either make duplicates an error or document the "last wins" behavior.
-
-### 9. Having both `value` and `valueFrom` is only a warning
-- **File**: `internal/config/validation.go:39-41`
-- **Issue**: A config entry can specify both sources simultaneously; `valueFrom` wins (providers overwrite). The warning may be missed.
-- **Fix**: Make this an error, or clearly document that `valueFrom` always overrides `value`.
-
-### 10. Swallowed HTTP error body read
-- **File**: `internal/provider/gitlab.go:83-84`
-- **Issue**: On HTTP error, `bodyBytes, _ := io.ReadAll(resp.Body)` ignores the read error. An I/O failure during error body read is silently lost.
-- **Fix**: Check the error or handle the read failure.
-
-## Security
-
-### 1. Hardcoded GitLab instance URL
-- **File**: `internal/provider/gitlab.go:66`
-- **Issue**: `https://gitlab.com/api/v4/...` — self-hosted GitLab instances unsupported. A user could accidentally authenticate with a token that has no access to gitlab.com.
-- **Fix**: Add a `gitlabHost` config field (or env var) that defaults to `https://gitlab.com`.
-
-### 2. No environment variable name validation
+### 2. Config validation: one source per entry, unique valid names
 - **File**: `internal/config/validation.go`
-- **Issue**: No validation on env var name format. POSIX requires `[A-Za-z_][A-Za-z0-9_]*`. Names with spaces, hyphens, or leading digits are silently accepted and will cause the spawned command to fail.
-- **Fix**: Validate names in `Validate()`.
+- Reject, instead of warn or accept:
+  - both `value` and `valueFrom` (`:39-41`, warning text is also wrong: `valueFrom` wins, not `value`)
+  - both `gcpSecretKeyRef` and `gitlabVariableKeyRef` (undocumented last-writer-wins today)
+  - duplicate names (`:23-26`, warning, last wins)
+  - names outside `[A-Za-z_][A-Za-z0-9_]*`. `os.Setenv` accepts `FOO BAR`, `FOO-BAR` and `1FOO` and the child sees them; only `=` is refused. The name is also the `asFile` filename.
+- Remove the dead check at `:44-47` (`hasGCP` already means `Name != ""`).
+- Ship together with #3: today a `value` beside a failing `valueFrom` acts as a silent fallback, and both changes remove that.
 
-### 3. No mutual exclusion check on `valueFrom` sources
-- **File**: `internal/config/validation.go`
-- **Issue**: A `valueFrom` block can specify both `gcpSecretKeyRef` and `gitlabVariableKeyRef` simultaneously. The behavior is deterministic last-writer-wins (gitlab overwrites gcp), but undocumented.
-- **Fix**: Either add validation that rejects dual-source entries or document the precedence clearly.
+### 3. Fetch failures are fatal
+- **Files**: `internal/provider/gcp.go:61-81`, `internal/provider/gitlab.go:39-48`
+- Missing project, access failure and empty payload log a warning and `continue`; the command then fails later with a confusing missing-variable error. Return an error instead.
+- Wrap the GCP provider in `context.WithTimeout` (`gcp.go:44`). gax already gives `AccessSecretVersion` a 60s timeout with retries (2s → 60s backoff), so it cannot hang forever, but the worst case is minutes.
+- Replace `hasGCPSecrets` / `hasGitlabVariables` (`gcp.go:89-96`, `gitlab.go:56-63`) with `slices.ContainsFunc`.
+- The `gcp_test.go` "skips only that secret" cases become error cases.
 
-### 4. Token visible in process environment
-- **File**: `internal/provider/gitlab.go:29`
-- **Issue**: Token lives in process env — visible via `/proc/<pid>/environ` to any process with sufficient permissions.
-- **Fix**: Document that the token should have minimal required permissions.
+### 4. GitLab client cleanup
+- `gitlab.go:75`: `http.Client{}` has no timeout; set one (30s).
+- `gitlab.go:14-21`: `GitlabVariable` is only used in `getGitlabVariable` and four of its fields are unused; make it local and drop them.
+- `gitlab.go:84`: the ignored error on the error-body read loses only the body text (the status is already in the message). Fix in passing or leave.
 
-## Missing Validation
+### 5. Test hygiene
+- `internal/env/env_test.go:11-24`: `captureStdout` must `defer` the `os.Stdout` restore, or a panic breaks every later test. The copy in `cmd/env-exec/main_test.go` already does.
 
-### 1. `valueFrom` mutual exclusion
-No validation that `valueFrom` sources are mutually exclusive. A user could specify both GCP and GitLab refs simultaneously.
+## Optional, on demand
 
-### 2. GCP secret version format
-No client-side validation of the `version` field. Non-numeric strings for numeric versions produce opaque API errors.
+### 6. `-c` / `--config` flag
+`ENV_EXEC_YAML=.env-exec.dev.yaml` already selects a per-environment config; a flag only makes it discoverable.
 
-### 3. GCP secret name emptiness (dead code)
-No client-side check that `gcpSecretKeyRef.name` is non-empty — the code at `validation.go:44-47` is dead code.
+### 7. Configurable GitLab host
+`gitlab.go:66` hardcodes `https://gitlab.com`. Add `defaults.gitlab.host` (or honour `CI_SERVER_URL`) when a self-hosted instance turns up.
 
-## Code Quality
+### 8. Mask secrets in `--dry-run`
+Dry-run prints every value in plaintext. Printing `<secret>` for `valueFrom` values by default, as `<file>` is printed for `asFile`, is simpler than a `--masked` flag, but it is a behaviour change: decide first.
 
-### 1. Duplicate `has*()` functions
-- **Files**: `internal/provider/gcp.go:89-96` and `gitlab.go:56-63`
-- **Issue**: Two structurally identical functions iterating over `cfg.Env` to check if a specific nested field is non-empty.
-- **Fix**: Factor into a generic helper: `func hasValueSource(cfg, check func(EnvConfig) bool) bool`.
+### 9. `fileSuffix` for `asFile` entries
+Files are named after the variable with no extension. No known tool checks it (GCP libraries and Snowflake do not); add an optional suffix when one does.
 
-### 2. Empty struct providers
-- **File**: `internal/provider/provider.go:12-24`
-- **Issue**: Providers are empty structs serving only as type identifiers. This makes adding provider configuration impossible without changing the interface.
-- **Fix**: Change `Provide` to accept a provider-specific config, or use `interface{}` / options pattern.
+### 10. Document: Linux and macOS only
+`internal/exec/exec.go` uses `golang.org/x/sys/unix`, Windows is not a goreleaser target and `GOOS=windows` does not build. The `export` output and `source <(env-exec)` are POSIX-shell only. One README line; do not port.
 
-### 3. Hardcoded provider registry
-- **File**: `internal/provider/provider.go:27-33`
-- **Issue**: Adding a new provider requires modifying `AllProviders()`.
-- **Fix**: Use a registry pattern (`var providers = make(map[string]Provider)`) with `Register(name, Provider)` for extensibility.
+## Rejected
 
-### 4. Package-level struct for single use
-- **File**: `internal/provider/gitlab.go:14-21`
-- **Issue**: `GitlabVariable` struct is only used inside `getGitlabVariable()`. Should be a local type to reduce package-level API surface.
-
-### 5. Fragile defer in test loop
-- **File**: `internal/env/env_test.go:96-98`
-- **Issue**: `defer os.Unsetenv(k)` inside a loop — fragile, breaks with `t.Parallel()`.
-
-### 6. Non-idiomatic HTTP request construction
-- **File**: `internal/provider/gitlab.go:68`
-- **Issue**: `http.NewRequest("GET", url, nil)` — modern form is `http.NewRequestWithContext(context.Background(), ...)`.
-
-## Design Improvements
-
-### 1. No way to enable/disable providers
-All providers always run. No configuration to skip a provider (e.g., skip GCP when running locally during development).
-
-### 2. `--dry-run` leaks secrets
-All values including secrets are printed in plaintext during dry-run (only `asFile` entries print `<file>`). A `--masked` option (similar to GitLab CI masked variables) would prevent accidental secret exposure.
-
-### 3. No environment-specific configs
-No support for dev/staging/prod config selection (e.g., `.env-exec.dev.yaml`).
-
-### 4. No templating
-No support for referencing other variables in values (e.g., `{{ .Env.DB_HOST }}`).
-
-## Planned Features
-
-### 1. `fileSuffix` for `asFile` entries
-- **Need**: `asFile` names the file after the variable, with no extension. Some tools check the extension (e.g. `.json`, `.p8`).
-- **Fix**: An optional per-entry `fileSuffix` appended to the file name.
-
-## Portability
-
-### 1. POSIX shell output format
-- **File**: `internal/env/env.go:12-13`
-- **Issue**: Outputs `export VAR='value'` syntax — not compatible with Windows cmd/PowerShell. The `source <(env-exec)` example uses bash-specific process substitution.
-- **Fix**: Document the limitation, or add a `--shell` flag for output format selection.
-
-## Recommended Priority Order
-
-| Priority | Issue | Effort | Impact |
-|----------|-------|--------|--------|
-| 1 | Bug 1: Wrong precedence warning + Bug 2: Dead code | Low | Medium — correctness |
-| 2 | Bug 3: HTTP timeout + Bug 4: Context timeout | Low | High — reliability |
-| 3 | Bug 5-6: Silent skip on fetch failure | Medium | Medium — UX |
-| 4 | Bug 7: `captureStdout` no defer | Low | Low — test fragility |
-| 5 | Security 1: GitLab host config | Low | Medium — common pain point |
-| 6 | Quality 1: Dedup has*() functions | Low | Low — cleanup |
-| 7 | Quality 3: Provider registry | Medium | Medium — extensibility |
+- **Validate GCP secret version as numeric or `latest`** — wrong: Secret Manager supports version aliases (`Secret.VersionAliases`), so `version: prod` is valid.
+- **Provider registry / non-empty provider structs** — three providers whose order defines precedence; provider config already flows through `cfg.Defaults`.
+- **Enable/disable providers** — a provider already runs only when an entry references it.
+- **Templating in values** — the shell does it. If a concrete need appears, `${VAR}` via `os.Expand` over the resolved map, not Go templates.
+- **`defer os.Unsetenv` in a test loop** (`env_test.go:96-98`) — correct as written; defers run at subtest end.
+- **`GITLAB_TOKEN` visible in the process environment** — it is the user's own input, not a code change. The child inherits it on purpose.
