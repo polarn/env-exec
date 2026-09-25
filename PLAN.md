@@ -4,7 +4,7 @@
 
 ### 1. Wrong precedence warning text
 - **File**: `internal/config/validation.go:40`
-- **Issue**: Warning says "value takes precedence" but `valueFrom` actually wins. Providers run `plain` → `gcp` → `gitlab` (`provider.go:28-32`); `plain.go:9` writes `value` first, then `gcp.go:53` / `gitlab.go:50` overwrite the same map key. Following the suggestion to "document that value always overrides valueFrom" would enshrine the opposite of runtime behavior.
+- **Issue**: Warning says "value takes precedence" but `valueFrom` actually wins. Providers run `plain` → `gcp` → `gitlab` (`provider.go:28-32`); `plain.go:9` writes `value` first, then `gcp.go:83` / `gitlab.go:50` overwrite the same map key. Following the suggestion to "document that value always overrides valueFrom" would enshrine the opposite of runtime behavior.
 - **Fix**: Correct the warning text to say "valueFrom takes precedence", or make it an error if both are set.
 
 ### 2. Dead code — uncheckable GCP name
@@ -18,13 +18,13 @@
 - **Fix**: Add a `Timeout` (e.g., 30s).
 
 ### 4. No context deadline on GCP calls
-- **File**: `internal/provider/gcp.go:19`
+- **File**: `internal/provider/gcp.go:44`
 - **Issue**: `context.Background()` with no deadline — hung GCP API calls block forever.
 - **Fix**: Use `context.WithTimeout` or pass a context through the provider.
 
 ### 5. Silent skip on unresolvable GCP secrets
-- **File**: `internal/provider/gcp.go:48-51`
-- **Issue**: Fetch failure logs a warning and `continue`s. The user's command fails with a confusing "missing env var" error and the real cause may be scrolled off screen.
+- **File**: `internal/provider/gcp.go:61-81`
+- **Issue**: A missing project, a fetch failure or an empty payload logs a warning and `continue`s. The user's command fails with a confusing "missing env var" error and the real cause may be scrolled off screen.
 - **Fix**: Make fetch failures fatal (return error), or at minimum buffer all warnings and print them once before execution.
 
 ### 6. Same silent-skip for GitLab variables
@@ -88,7 +88,7 @@ No client-side check that `gcpSecretKeyRef.name` is non-empty — the code at `v
 ## Code Quality
 
 ### 1. Duplicate `has*()` functions
-- **Files**: `internal/provider/gcp.go:59-66` and `gitlab.go:56-63`
+- **Files**: `internal/provider/gcp.go:89-96` and `gitlab.go:56-63`
 - **Issue**: Two structurally identical functions iterating over `cfg.Env` to check if a specific nested field is non-empty.
 - **Fix**: Factor into a generic helper: `func hasValueSource(cfg, check func(EnvConfig) bool) bool`.
 
@@ -120,7 +120,7 @@ No client-side check that `gcpSecretKeyRef.name` is non-empty — the code at `v
 All providers always run. No configuration to skip a provider (e.g., skip GCP when running locally during development).
 
 ### 2. `--dry-run` leaks secrets
-All values including secrets are printed in plaintext during dry-run. A `--masked` option (similar to GitLab CI masked variables) would prevent accidental secret exposure.
+All values including secrets are printed in plaintext during dry-run (only `asFile` entries print `<file>`). A `--masked` option (similar to GitLab CI masked variables) would prevent accidental secret exposure.
 
 ### 3. No environment-specific configs
 No support for dev/staging/prod config selection (e.g., `.env-exec.dev.yaml`).
@@ -128,14 +128,15 @@ No support for dev/staging/prod config selection (e.g., `.env-exec.dev.yaml`).
 ### 4. No templating
 No support for referencing other variables in values (e.g., `{{ .Env.DB_HOST }}`).
 
+## Planned Features
+
+### 1. `fileSuffix` for `asFile` entries
+- **Need**: `asFile` names the file after the variable, with no extension. Some tools check the extension (e.g. `.json`, `.p8`).
+- **Fix**: An optional per-entry `fileSuffix` appended to the file name.
+
 ## Portability
 
-### 1. `syscall.WaitStatus` on Windows
-- **File**: `internal/exec/exec.go:21`
-- **Issue**: `syscall.WaitStatus` actually exists on Windows and the assertion succeeds, so it's not broken. However, `exitError.ExitCode()` is more idiomatic and clearer.
-- **Fix**: Replace with `exitError.ExitCode()` for readability.
-
-### 2. POSIX shell output format
+### 1. POSIX shell output format
 - **File**: `internal/env/env.go:12-13`
 - **Issue**: Outputs `export VAR='value'` syntax — not compatible with Windows cmd/PowerShell. The `source <(env-exec)` example uses bash-specific process substitution.
 - **Fix**: Document the limitation, or add a `--shell` flag for output format selection.
