@@ -1,15 +1,13 @@
 package provider
 
 import (
-	"bytes"
 	"context"
 	"errors"
-	"log"
 	"maps"
-	"os"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/polarn/env-exec/internal/config"
@@ -19,6 +17,7 @@ type fakeSecretClient struct {
 	secrets   map[string]string
 	errs      map[string]error
 	noPayload map[string]bool
+	block     bool
 	requested []string
 	closed    bool
 }
@@ -26,6 +25,11 @@ type fakeSecretClient struct {
 func (f *fakeSecretClient) AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest) (*secretmanagerpb.AccessSecretVersionResponse, error) {
 	name := req.GetName()
 	f.requested = append(f.requested, name)
+
+	if f.block {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
 
 	if err, ok := f.errs[name]; ok {
 		return nil, err
@@ -64,20 +68,6 @@ func installSecretAccessor(t *testing.T, client secretAccessor, err error) {
 	t.Cleanup(func() { newSecretAccessor = original })
 }
 
-func captureLog(t *testing.T) *bytes.Buffer {
-	t.Helper()
-
-	var buf bytes.Buffer
-	flags := log.Flags()
-	log.SetOutput(&buf)
-	log.SetFlags(0)
-	t.Cleanup(func() {
-		log.SetOutput(os.Stderr)
-		log.SetFlags(flags)
-	})
-	return &buf
-}
-
 func gcpEnv(name, project, secret, version string) config.EnvConfig {
 	return config.EnvConfig{
 		Name: name,
@@ -107,7 +97,7 @@ func TestGCPProvider_Provide(t *testing.T) {
 		existing      map[string]string
 		want          map[string]string
 		wantRequested []string
-		wantLog       string
+		wantErr       string
 	}{
 		{
 			name:          "explicit project and version",
@@ -144,25 +134,7 @@ func TestGCPProvider_Provide(t *testing.T) {
 			wantRequested: []string{"projects/own-proj/secrets/api-token/versions/1"},
 		},
 		{
-			name:          "no project anywhere is skipped",
-			config:        &config.RootConfig{Env: []config.EnvConfig{gcpEnv("TOKEN", "", "api-token", "")}},
-			want:          map[string]string{},
-			wantRequested: nil,
-			wantLog:       "Warning: No GCP project found for secret 'TOKEN', skipping",
-		},
-		{
-			name: "missing project skips only that secret",
-			config: &config.RootConfig{Env: []config.EnvConfig{
-				gcpEnv("NO_PROJECT", "", "orphan", ""),
-				gcpEnv("TOKEN", "proj", "api-token", ""),
-			}},
-			secrets:       map[string]string{"projects/proj/secrets/api-token/versions/latest": "s3cret"},
-			want:          map[string]string{"TOKEN": "s3cret"},
-			wantRequested: []string{"projects/proj/secrets/api-token/versions/latest"},
-			wantLog:       "Warning: No GCP project found for secret 'NO_PROJECT', skipping",
-		},
-		{
-			name: "access failure skips only that secret",
+			name: "access failure stops at that secret",
 			config: &config.RootConfig{Env: []config.EnvConfig{
 				gcpEnv("BROKEN", "proj", "broken", ""),
 				gcpEnv("TOKEN", "proj", "api-token", ""),
@@ -171,12 +143,9 @@ func TestGCPProvider_Provide(t *testing.T) {
 			errs: map[string]error{
 				"projects/proj/secrets/broken/versions/latest": errors.New("permission denied"),
 			},
-			want: map[string]string{"TOKEN": "s3cret"},
-			wantRequested: []string{
-				"projects/proj/secrets/broken/versions/latest",
-				"projects/proj/secrets/api-token/versions/latest",
-			},
-			wantLog: "Warning: Failed to access GCP secret 'broken' version 'latest': permission denied",
+			want:          map[string]string{},
+			wantRequested: []string{"projects/proj/secrets/broken/versions/latest"},
+			wantErr:       "'BROKEN': failed to access projects/proj/secrets/broken/versions/latest: permission denied",
 		},
 		{
 			name: "ignores plain and gitlab entries",
@@ -212,27 +181,23 @@ func TestGCPProvider_Provide(t *testing.T) {
 			wantRequested: []string{"projects/proj/secrets/blank/versions/latest"},
 		},
 		{
-			name:          "response without payload is skipped",
-			config:        &config.RootConfig{Env: []config.EnvConfig{gcpEnv("TOKEN", "proj", "api-token", "")}},
-			noPayload:     map[string]bool{"projects/proj/secrets/api-token/versions/latest": true},
-			want:          map[string]string{},
-			wantRequested: []string{"projects/proj/secrets/api-token/versions/latest"},
-			wantLog:       "Warning: GCP secret 'api-token' version 'latest' returned no payload, skipping",
-		},
-		{
-			name: "missing payload skips only that secret",
+			name: "missing payload stops at that secret",
 			config: &config.RootConfig{Env: []config.EnvConfig{
-				gcpEnv("EMPTY", "proj", "no-payload", "7"),
 				gcpEnv("TOKEN", "proj", "api-token", ""),
+				gcpEnv("EMPTY", "proj", "no-payload", "7"),
+				gcpEnv("LATER", "proj", "later", ""),
 			}},
-			secrets:   map[string]string{"projects/proj/secrets/api-token/versions/latest": "s3cret"},
+			secrets: map[string]string{
+				"projects/proj/secrets/api-token/versions/latest": "s3cret",
+				"projects/proj/secrets/later/versions/latest":     "later",
+			},
 			noPayload: map[string]bool{"projects/proj/secrets/no-payload/versions/7": true},
 			want:      map[string]string{"TOKEN": "s3cret"},
 			wantRequested: []string{
-				"projects/proj/secrets/no-payload/versions/7",
 				"projects/proj/secrets/api-token/versions/latest",
+				"projects/proj/secrets/no-payload/versions/7",
 			},
-			wantLog: "Warning: GCP secret 'no-payload' version '7' returned no payload, skipping",
+			wantErr: "'EMPTY': projects/proj/secrets/no-payload/versions/7 returned no payload",
 		},
 		{
 			name: "multiple secrets fetched in config order",
@@ -259,14 +224,16 @@ func TestGCPProvider_Provide(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			client := &fakeSecretClient{secrets: tt.secrets, errs: tt.errs, noPayload: tt.noPayload}
 			installSecretAccessor(t, client, nil)
-			logged := captureLog(t)
 
 			envVars := make(map[string]string)
 			maps.Copy(envVars, tt.existing)
 
-			p := &GCPProvider{}
-			if err := p.Provide(tt.config, envVars); err != nil {
+			err := (&GCPProvider{}).Provide(tt.config, envVars)
+			if tt.wantErr == "" && err != nil {
 				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantErr != "" && (err == nil || err.Error() != tt.wantErr) {
+				t.Fatalf("want error %q, got: %v", tt.wantErr, err)
 			}
 
 			if !reflect.DeepEqual(envVars, tt.want) {
@@ -277,12 +244,6 @@ func TestGCPProvider_Provide(t *testing.T) {
 			}
 			if !client.closed {
 				t.Error("client was not closed")
-			}
-			if tt.wantLog != "" && !strings.Contains(logged.String(), tt.wantLog) {
-				t.Errorf("want log containing %q, got %q", tt.wantLog, logged.String())
-			}
-			if tt.wantLog == "" && logged.Len() != 0 {
-				t.Errorf("want no log output, got %q", logged.String())
 			}
 		})
 	}
@@ -330,5 +291,24 @@ func TestGCPProvider_ProvideClientError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "failed to create Secret Manager client") {
 		t.Errorf("want client creation message, got %q", err.Error())
+	}
+}
+
+func TestGCPProvider_ProvideTimeout(t *testing.T) {
+	original := gcpTimeout
+	gcpTimeout = 10 * time.Millisecond
+	t.Cleanup(func() { gcpTimeout = original })
+
+	client := &fakeSecretClient{block: true}
+	installSecretAccessor(t, client, nil)
+
+	cfg := &config.RootConfig{Env: []config.EnvConfig{gcpEnv("TOKEN", "proj", "api-token", "")}}
+
+	err := (&GCPProvider{}).Provide(cfg, map[string]string{})
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("want deadline exceeded, got %v", err)
+	}
+	if !client.closed {
+		t.Error("client was not closed")
 	}
 }

@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
+	"slices"
 
 	"github.com/polarn/env-exec/internal/config"
 )
@@ -22,7 +22,7 @@ type GitlabVariable struct {
 
 // Provide fetches GitLab variables and adds them to the envVars map.
 func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
-	if !hasGitlabVariables(cfg) {
+	if !slices.ContainsFunc(cfg.Env, func(env config.EnvConfig) bool { return env.ValueFrom.GitlabVariableKeyRef.Key != "" }) {
 		return nil
 	}
 
@@ -36,30 +36,15 @@ func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]stri
 			key := env.ValueFrom.GitlabVariableKeyRef.Key
 			project := env.ValueFrom.GitlabVariableKeyRef.Project
 
-			if project == "" {
-				log.Printf("Warning: No GitLab project found for variable '%s', skipping", env.Name)
-				continue
-			}
-
 			value, err := getGitlabVariable(gitlabToken, key, project)
 			if err != nil {
-				log.Printf("Warning: Failed to get GitLab variable '%s': %v", key, err)
-				continue
+				return fmt.Errorf("'%s': variable '%s' in project '%s': %w", env.Name, key, project, err)
 			}
 
 			envVars[env.Name] = value
 		}
 	}
 	return nil
-}
-
-func hasGitlabVariables(cfg *config.RootConfig) bool {
-	for _, env := range cfg.Env {
-		if env.ValueFrom.GitlabVariableKeyRef.Key != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func getGitlabVariable(gitlabToken, key, project string) (string, error) {

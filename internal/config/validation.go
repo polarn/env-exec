@@ -2,11 +2,13 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"regexp"
 )
 
+var validName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 func Validate(cfg *RootConfig) error {
-	seen := make(map[string]bool)
+	seen := make(map[string]int)
 
 	for i, env := range cfg.Env {
 		prefix := fmt.Sprintf("env[%d]", i)
@@ -14,18 +16,19 @@ func Validate(cfg *RootConfig) error {
 			prefix = fmt.Sprintf("env[%d] '%s'", i, env.Name)
 		}
 
-		// Name is required
 		if env.Name == "" {
 			return fmt.Errorf("%s: name is required", prefix)
 		}
 
-		// Check for duplicates
-		if seen[env.Name] {
-			log.Printf("Warning: %s: duplicate env name", prefix)
+		if !validName.MatchString(env.Name) {
+			return fmt.Errorf("%s: name must match %s", prefix, validName)
 		}
-		seen[env.Name] = true
 
-		// Must have value or valueFrom, not neither
+		if first, ok := seen[env.Name]; ok {
+			return fmt.Errorf("%s: duplicate name, first defined at env[%d]", prefix, first)
+		}
+		seen[env.Name] = i
+
 		hasValue := env.Value != ""
 		hasGCP := env.ValueFrom.GCPSecretKeyRef.Name != ""
 		hasGitlab := env.ValueFrom.GitlabVariableKeyRef.Key != ""
@@ -35,26 +38,20 @@ func Validate(cfg *RootConfig) error {
 			return fmt.Errorf("%s: must have value or valueFrom", prefix)
 		}
 
-		// Warn if both value and valueFrom are set
 		if hasValue && hasValueFrom {
-			log.Printf("Warning: %s: has both value and valueFrom, value takes precedence", prefix)
+			return fmt.Errorf("%s: value and valueFrom are mutually exclusive", prefix)
 		}
 
-		// Validate GCP secret ref
-		if hasGCP {
-			if env.ValueFrom.GCPSecretKeyRef.Name == "" {
-				return fmt.Errorf("%s: gcpSecretKeyRef.name is required", prefix)
-			}
+		if hasGCP && hasGitlab {
+			return fmt.Errorf("%s: gcpSecretKeyRef and gitlabVariableKeyRef are mutually exclusive", prefix)
 		}
 
-		// Validate GitLab variable ref
-		if hasGitlab {
-			if env.ValueFrom.GitlabVariableKeyRef.Key == "" {
-				return fmt.Errorf("%s: gitlabVariableKeyRef.key is required", prefix)
-			}
-			if env.ValueFrom.GitlabVariableKeyRef.Project == "" {
-				return fmt.Errorf("%s: gitlabVariableKeyRef.project is required", prefix)
-			}
+		if hasGCP && env.ValueFrom.GCPSecretKeyRef.Project == "" && cfg.Defaults.GCP.Project == "" {
+			return fmt.Errorf("%s: gcpSecretKeyRef.project is required when defaults.gcp.project is not set", prefix)
+		}
+
+		if hasGitlab && env.ValueFrom.GitlabVariableKeyRef.Project == "" {
+			return fmt.Errorf("%s: gitlabVariableKeyRef.project is required", prefix)
 		}
 	}
 
