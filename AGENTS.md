@@ -26,20 +26,13 @@ go mod tidy
 
 ## Architecture
 
-- **Provider pattern**: Each provider implements `Provide(config *config.RootConfig, envVars map[string]string) error`. Providers run in fixed order: `plain` → `gcp` → `gitlab`. All populate a shared `envVars` map. Note: `valueFrom` providers run after `plain`, so `valueFrom` values overwrite `value` entries for the same key.
+- **Provider pattern**: Each provider implements `Provide(config *config.RootConfig, envVars map[string]string) error`. Providers run in fixed order: `plain` → `gcp` → `gitlab`. All populate a shared `envVars` map; validation ensures no two providers set the same name.
+- **Validation**: `config.Validate` runs before any provider. It rejects an entry with no source or more than one (`value`, `gcpSecretKeyRef`, `gitlabVariableKeyRef`), duplicate names, names outside `[A-Za-z_][A-Za-z0-9_]*`, and GCP refs with no project and no `defaults.gcp.project`.
+- **Fetch failures are fatal**: a failed or empty fetch returns an error naming the variable; providers never log and skip. The GCP provider runs under a one-minute `context.WithTimeout`.
 - **Execution model**: Vars are injected into the current process via `os.Setenv` before `exec.Command` spawns the target command. `main.run()` returns the exit code instead of calling `os.Exit`, so deferred cleanup runs.
 - **File-backed vars (`asFile`)**: `env.WriteFiles` writes the resolved value to a `0600` file in a private dir under `$XDG_RUNTIME_DIR` (else `os.TempDir()`) and replaces the value with the path. The dir is removed after the child exits. Rejected in export mode; masked as `<file>` in dry-run.
 - **Signals**: `exec.Run` catches `SIGINT`/`SIGTERM`, forwards them to the child and waits for it. A `SIGINT` is not forwarded while env-exec is in the terminal's foreground process group, because Ctrl-C already reached the child and a second interrupt makes tools like terraform abort immediately. A child killed by a signal exits `128+n`.
 - **Config loading**: Reads `.env-exec.yaml` from the current working directory. Overridable via `ENV_EXEC_YAML` env var only (no `--config` flag).
-
-## Critical Known Issues (Do NOT Regress)
-
-| Issue | Location | Details |
-|-------|----------|---------|
-| Silent failures | `internal/provider/gcp.go:61-81`, `internal/provider/gitlab.go:45-47` | Provider fetch failures log a warning and skip — downstream command fails with confusing "missing env var" |
-| Wrong precedence warning | `internal/config/validation.go:40` | Warning text says "value takes precedence" but `valueFrom` actually wins (providers overwrite) |
-| Dead code | `internal/config/validation.go:44-47` | Inner `Name == ""` check can never fire because `hasGCP` is `Name != ""` — dead code |
-| No log control | `gcp.go:62,74,79`, `gitlab.go:40,46` | Providers use `log.Printf` for warnings — callers can't control format/destination/level; `plain.go` has no logging |
 
 ## Conventions
 

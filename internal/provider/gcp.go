@@ -3,7 +3,8 @@ package provider
 import (
 	"context"
 	"fmt"
-	"log"
+	"slices"
+	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
 	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
@@ -35,13 +36,17 @@ var newSecretAccessor = func(ctx context.Context) (secretAccessor, error) {
 	return &secretManagerClient{client: client}, nil
 }
 
+var gcpTimeout = time.Minute
+
 // Provide fetches GCP secrets and adds them to the envVars map.
 func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
-	if !hasGCPSecrets(cfg) {
+	if !slices.ContainsFunc(cfg.Env, func(env config.EnvConfig) bool { return env.ValueFrom.GCPSecretKeyRef.Name != "" }) {
 		return nil
 	}
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), gcpTimeout)
+	defer cancel()
+
 	client, err := newSecretAccessor(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to create Secret Manager client: %w", err)
@@ -58,10 +63,7 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 				version = "latest"
 			}
 
-			if project == "" && cfg.Defaults.GCP.Project == "" {
-				log.Printf("Warning: No GCP project found for secret '%s', skipping", env.Name)
-				continue
-			} else if project == "" {
+			if project == "" {
 				project = cfg.Defaults.GCP.Project
 			}
 
@@ -71,26 +73,15 @@ func (p *GCPProvider) Provide(cfg *config.RootConfig, envVars map[string]string)
 				Name: reqName,
 			})
 			if err != nil {
-				log.Printf("Warning: Failed to access GCP secret '%s' version '%s': %v", name, version, err)
-				continue
+				return fmt.Errorf("'%s': failed to access %s: %w", env.Name, reqName, err)
 			}
 
 			if resp.GetPayload() == nil {
-				log.Printf("Warning: GCP secret '%s' version '%s' returned no payload, skipping", name, version)
-				continue
+				return fmt.Errorf("'%s': %s returned no payload", env.Name, reqName)
 			}
 
 			envVars[env.Name] = string(resp.GetPayload().GetData())
 		}
 	}
 	return nil
-}
-
-func hasGCPSecrets(cfg *config.RootConfig) bool {
-	for _, env := range cfg.Env {
-		if env.ValueFrom.GCPSecretKeyRef.Name != "" {
-			return true
-		}
-	}
-	return false
 }

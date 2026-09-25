@@ -89,6 +89,8 @@ env:
 
 The syntax is inspired by Kubernetes pod specs.
 
+Each entry has exactly one source: `value`, `gcpSecretKeyRef` or `gitlabVariableKeyRef`. Names must be unique and match `[A-Za-z_][A-Za-z0-9_]*`. If any value cannot be fetched, env-exec exits with an error and does not run the command.
+
 ### File-backed Variables
 
 Some tools take a *path* to a secret rather than the secret itself (a private key, a service account key, a kubeconfig). Set `asFile: true` on any entry, whatever its source, and env-exec writes the value to a file and sets the variable to that file's path.
