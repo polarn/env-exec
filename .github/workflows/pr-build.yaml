@@ -29,21 +29,21 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Debian Packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: debian-packages
           path: dist/*.deb
           retention-days: 30
 
       - name: Upload RPM Packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rpm-packages
           path: dist/*.rpm
           retention-days: 30
 
       - name: Upload Archives
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: archives
           path: dist/*.tar.gz
