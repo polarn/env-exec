@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
-	"log"
+	"regexp"
 )
+
+var validName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func Validate(cfg *RootConfig) error {
 	seen := make(map[string]bool)
@@ -14,18 +16,19 @@ func Validate(cfg *RootConfig) error {
 			prefix = fmt.Sprintf("env[%d] '%s'", i, env.Name)
 		}
 
-		// Name is required
 		if env.Name == "" {
 			return fmt.Errorf("%s: name is required", prefix)
 		}
 
-		// Check for duplicates
+		if !validName.MatchString(env.Name) {
+			return fmt.Errorf("%s: invalid name", prefix)
+		}
+
 		if seen[env.Name] {
-			log.Printf("Warning: %s: duplicate env name", prefix)
+			return fmt.Errorf("%s: duplicate env name", prefix)
 		}
 		seen[env.Name] = true
 
-		// Must have value or valueFrom, not neither
 		hasValue := env.Value != ""
 		hasGCP := env.ValueFrom.GCPSecretKeyRef.Name != ""
 		hasGitlab := env.ValueFrom.GitlabVariableKeyRef.Key != ""
@@ -35,23 +38,15 @@ func Validate(cfg *RootConfig) error {
 			return fmt.Errorf("%s: must have value or valueFrom", prefix)
 		}
 
-		// Warn if both value and valueFrom are set
 		if hasValue && hasValueFrom {
-			log.Printf("Warning: %s: has both value and valueFrom, value takes precedence", prefix)
+			return fmt.Errorf("%s: cannot have both value and valueFrom", prefix)
 		}
 
-		// Validate GCP secret ref
-		if hasGCP {
-			if env.ValueFrom.GCPSecretKeyRef.Name == "" {
-				return fmt.Errorf("%s: gcpSecretKeyRef.name is required", prefix)
-			}
+		if hasGCP && hasGitlab {
+			return fmt.Errorf("%s: cannot have both gcpSecretKeyRef and gitlabVariableKeyRef", prefix)
 		}
 
-		// Validate GitLab variable ref
 		if hasGitlab {
-			if env.ValueFrom.GitlabVariableKeyRef.Key == "" {
-				return fmt.Errorf("%s: gitlabVariableKeyRef.key is required", prefix)
-			}
 			if env.ValueFrom.GitlabVariableKeyRef.Project == "" {
 				return fmt.Errorf("%s: gitlabVariableKeyRef.project is required", prefix)
 			}

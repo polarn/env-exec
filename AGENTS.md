@@ -37,8 +37,6 @@ go mod tidy
 | Issue | Location | Details |
 |-------|----------|---------|
 | Silent failures | `internal/provider/gcp.go:61-81`, `internal/provider/gitlab.go:45-47` | Provider fetch failures log a warning and skip — downstream command fails with confusing "missing env var" |
-| Wrong precedence warning | `internal/config/validation.go:40` | Warning text says "value takes precedence" but `valueFrom` actually wins (providers overwrite) |
-| Dead code | `internal/config/validation.go:44-47` | Inner `Name == ""` check can never fire because `hasGCP` is `Name != ""` — dead code |
 | No log control | `gcp.go:62,74,79`, `gitlab.go:40,46` | Providers use `log.Printf` for warnings — callers can't control format/destination/level; `plain.go` has no logging |
 
 ## Conventions

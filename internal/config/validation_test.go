@@ -71,6 +71,54 @@ func TestValidate(t *testing.T) {
 			}}},
 			wantErr: "must have value or valueFrom",
 		},
+		{
+			name:    "valid name with underscore and digits",
+			config:  &RootConfig{Env: []EnvConfig{{Name: "_TEST_123", Value: "hello"}}},
+			wantErr: "",
+		},
+		{
+			name:    "invalid name with hyphen",
+			config:  &RootConfig{Env: []EnvConfig{{Name: "FOO-BAR", Value: "hello"}}},
+			wantErr: "invalid name",
+		},
+		{
+			name:    "invalid name with space",
+			config:  &RootConfig{Env: []EnvConfig{{Name: "FOO BAR", Value: "hello"}}},
+			wantErr: "invalid name",
+		},
+		{
+			name:    "invalid name starting with digit",
+			config:  &RootConfig{Env: []EnvConfig{{Name: "1FOO", Value: "hello"}}},
+			wantErr: "invalid name",
+		},
+		{
+			name: "duplicate name",
+			config: &RootConfig{Env: []EnvConfig{
+				{Name: "FOO", Value: "1"},
+				{Name: "FOO", Value: "2"},
+			}},
+			wantErr: "duplicate env name",
+		},
+		{
+			name: "both value and valueFrom",
+			config: &RootConfig{Env: []EnvConfig{{
+				Name:      "TEST",
+				Value:     "hello",
+				ValueFrom: ValueFrom{GCPSecretKeyRef: GCPSecretKeyRef{Name: "secret"}},
+			}}},
+			wantErr: "cannot have both value and valueFrom",
+		},
+		{
+			name: "both GCP secret and GitLab variable",
+			config: &RootConfig{Env: []EnvConfig{{
+				Name: "TEST",
+				ValueFrom: ValueFrom{
+					GCPSecretKeyRef:      GCPSecretKeyRef{Name: "secret"},
+					GitlabVariableKeyRef: GitlabVariableKeyRef{Project: "123", Key: "key"},
+				},
+			}}},
+			wantErr: "cannot have both gcpSecretKeyRef and gitlabVariableKeyRef",
+		},
 	}
 
 	for _, tt := range tests {
