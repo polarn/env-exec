@@ -117,23 +117,14 @@ func TestSet(t *testing.T) {
 
 func TestCaptureStdout_RestoresOnPanic(t *testing.T) {
 	old := os.Stdout
-	defer func() {
-		if os.Stdout != old {
-			t.Errorf("want os.Stdout restored to %v, got %v", old, os.Stdout)
-			os.Stdout = old
-		}
-	}()
+	t.Cleanup(func() { os.Stdout = old })
 
 	func() {
-		defer func() {
-			_ = recover()
-		}()
-		captureStdout(t, func() {
-			panic("boom")
-		})
+		defer func() { _ = recover() }()
+		captureStdout(t, func() { panic("boom") })
 	}()
 
 	if os.Stdout != old {
-		t.Errorf("want os.Stdout restored to %v, got %v", old, os.Stdout)
+		t.Error("os.Stdout not restored after panic")
 	}
 }
