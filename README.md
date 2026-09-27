@@ -50,6 +50,20 @@ source <(env-exec)
 ENV_EXEC_YAML=/path/to/config.yaml env-exec terraform plan
 ```
 
+### Shell Completion
+
+Completion for bash, zsh and fish covers env-exec's flags and the command name, then hands over to that command's own completion, so `env-exec terraform pl<TAB>` completes `plan`.
+
+The AUR, Homebrew, deb and rpm packages install the completion files. From a release archive, copy them from `completions/`:
+
+```bash
+cp completions/env-exec.bash ~/.local/share/bash-completion/completions/env-exec
+cp completions/_env-exec ~/.zfunc/   # any directory in $fpath
+cp completions/env-exec.fish ~/.config/fish/completions/
+```
+
+Bash needs bash-completion 2.x (`bash-completion@2` on Homebrew).
+
 ## Configuration
 
 Create a `.env-exec.yaml` file:

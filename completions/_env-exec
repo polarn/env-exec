@@ -1,0 +1,8 @@
+#compdef env-exec
+
+_arguments : \
+  '(- : *)'{-h,--help}'[Show this help message]' \
+  '(- : *)'{-v,--version}'[Show version information]' \
+  '(-n --dry-run)'{-n,--dry-run}'[Print environment variables without executing command]' \
+  '(-)1: :_command_names -e' \
+  '*:: :_normal'
