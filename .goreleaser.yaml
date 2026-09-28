@@ -31,6 +31,12 @@ archives:
       {{- else if eq .Arch "386" }}i386
       {{- else }}{{ .Arch }}{{ end }}
       {{- if .Arm }}v{{ .Arm }}{{ end }}
+    files:
+      - README.md
+      - LICENSE
+      - completions/env-exec.bash
+      - completions/_env-exec
+      - completions/env-exec.fish
 
 changelog:
   use: github-native
@@ -44,6 +50,11 @@ aurs:
     description: "A tool to inject environment variables from various sources (GCP Secrets Manager, GitLab) before executing commands"
     maintainers:
       - "Marcus Johansson <polarn@polarn.net>"
+    package: |-
+      install -Dm755 "./env-exec" "${pkgdir}/usr/bin/env-exec"
+      install -Dm644 "./completions/env-exec.bash" "${pkgdir}/usr/share/bash-completion/completions/env-exec"
+      install -Dm644 "./completions/_env-exec" "${pkgdir}/usr/share/zsh/site-functions/_env-exec"
+      install -Dm644 "./completions/env-exec.fish" "${pkgdir}/usr/share/fish/vendor_completions.d/env-exec.fish"
 
 homebrew_casks:
   - name: env-exec
@@ -54,6 +65,10 @@ homebrew_casks:
     directory: Casks
     homepage: "https://github.com/polarn/env-exec"
     description: "The Environment variable executor"
+    completions:
+      bash: completions/env-exec.bash
+      zsh: completions/_env-exec
+      fish: completions/env-exec.fish
 
 nfpms:
   - id: env-exec-packages
@@ -68,6 +83,18 @@ nfpms:
     maintainer: Marcus Johansson <polarn@polarn.net>
     description: "A tool to inject environment variables from various sources (GCP Secrets Manager, GitLab) before executing commands"
     license: Apache-2.0
+
+    contents:
+      - src: completions/env-exec.bash
+        dst: /usr/share/bash-completion/completions/env-exec
+      - src: completions/_env-exec
+        dst: /usr/share/zsh/vendor-completions/_env-exec
+        packager: deb
+      - src: completions/_env-exec
+        dst: /usr/share/zsh/site-functions/_env-exec
+        packager: rpm
+      - src: completions/env-exec.fish
+        dst: /usr/share/fish/vendor_completions.d/env-exec.fish
 
 publishers:
   - name: apt-repo-webdav

@@ -28,6 +28,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check Packages
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq rpm
+          .github/scripts/check-packages.sh
+
       - name: Upload Debian Packages
         uses: actions/upload-artifact@v7
         with:

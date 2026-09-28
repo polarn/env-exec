@@ -12,6 +12,7 @@ internal/config/             # Config loading (reads .env-exec.yaml from CWD; ov
 internal/env/                # Prints export statements, sets process env vars, writes asFile files
 internal/exec/               # Runs command via os/exec, forwards signals and exit code
 internal/provider/           # Provider interface + implementations (plain, gcp, gitlab)
+completions/                 # bash, zsh and fish completion; test.sh checks them
 ```
 
 ## Build & Test
@@ -20,6 +21,7 @@ internal/provider/           # Provider interface + implementations (plain, gcp,
 go build ./...
 go test ./...
 go mod tidy
+completions/test.sh          # needs bash-completion 2.x, fish and zsh
 ```
 
 **Go version: 1.26** — keep in sync across `go.mod` and all GitHub workflows.
@@ -33,6 +35,7 @@ go mod tidy
 - **File-backed vars (`asFile`)**: `env.WriteFiles` writes the resolved value to a `0600` file in a private dir under `$XDG_RUNTIME_DIR` (else `os.TempDir()`) and replaces the value with the path. The dir is removed after the child exits. Rejected in export mode; masked as `<file>` in dry-run.
 - **Signals**: `exec.Run` catches `SIGINT`/`SIGTERM`, forwards them to the child and waits for it. A `SIGINT` is not forwarded while env-exec is in the terminal's foreground process group, because Ctrl-C already reached the child and a second interrupt makes tools like terraform abort immediately. A child killed by a signal exits `128+n`.
 - **Config loading**: Reads `.env-exec.yaml` from the current working directory. Overridable via `ENV_EXEC_YAML` env var only (no `--config` flag).
+- **Shell completion**: `completions/` completes env-exec's flags up to the first non-flag word, then delegates to that command's completion, like `sudo`/`nice`. `-h` and `-v` exit, so nothing completes after them. goreleaser ships the files in the archives, deb/rpm, AUR package and Homebrew cask; `.github/scripts/check-packages.sh` checks the snapshot output in the PR build. A flag change means updating `printUsage`, the README and all three completion files.
 
 ## Conventions
 
