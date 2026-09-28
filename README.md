@@ -137,7 +137,7 @@ export GITLAB_TOKEN=glpat-xxxx
 env-exec terraform plan
 ```
 
-- `project` - GitLab project ID (required)
+- `project` - GitLab project ID or full path, such as `12345` or `group/app` (required)
 - `key` - Variable key (required)
 
 ## License
