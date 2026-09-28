@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Checks the bash and fish completions against a stub command and parses the zsh one.
+# Checks the bash, fish and zsh completions against a stub command.
 # Needs bash-completion 2.x, fish and zsh. BASH_COMPLETION overrides the bash_completion path.
 set -euo pipefail
 export LC_ALL=C
@@ -14,6 +14,41 @@ printf '#!/bin/sh\n' >"$tmp/bin/stubcmd"
 chmod +x "$tmp/bin/stubcmd"
 export PATH="$tmp/bin:$PATH"
 cd "$tmp"
+
+mkdir "$tmp/zdot"
+cat >"$tmp/zdot/.zshrc" <<'EOF'
+PS1='<PROMPT>'
+path=("${ZDOTDIR:h}/bin")
+fpath=("$COMPLETIONS" $fpath)
+autoload -Uz compinit && compinit -u -D
+zmodload zsh/complist
+LISTMAX=1000000
+zstyle ':completion:*' verbose no
+zstyle ':completion:*:default' list-colors 'no=NO' 'lc=<LC>' 'rc=<RC>' 'ec=<EC>'
+_stubcmd() { compadd plan apply }
+compdef _stubcmd stubcmd
+_test_list() { zle list-choices }
+_test_end() { print -r '<END>' }
+zle -N _test_list
+zle -N _test_end
+bindkey '^E' _test_list
+bindkey '^A' _test_end
+EOF
+
+cat >"$tmp/complete.zsh" <<'EOF'
+zmodload zsh/zpty
+zpty z "ZDOTDIR=${(q)1} zsh -d -i"
+zpty -r -m z out '*<PROMPT>*' || exit 1
+zpty -w -n z "$2"$'\C-E\C-A'
+out=
+while zpty -r z line; do
+    out+=$line
+    [[ $line == *'<END>'* ]] && break
+done
+zpty -d z
+[[ $out == *'<END>'* ]] || exit 1
+print -r -- "$out"
+EOF
 
 complete_bash() (
     set +euo pipefail
@@ -38,6 +73,15 @@ complete_fish() {
         complete -c stubcmd -f -a "plan apply"
         complete -C $argv[2]
     ' "$dir/env-exec.fish" "$1"
+}
+
+complete_zsh() {
+    local out
+    out=$(COMPLETIONS=$dir timeout 30 zsh -f "$tmp/complete.zsh" "$tmp/zdot" "$1") || {
+        echo 'zsh driver failed'
+        return
+    }
+    grep -o '<LC>NO<RC>[^<]*<EC>' <<<"$out" | sed 's/^<LC>NO<RC>//; s/<EC>$//'
 }
 
 status=0
@@ -66,16 +110,19 @@ cases=(
     'env-exec -h ' ''
 )
 
+declare -A zsh_want=(
+    ['env-exec -']='- --dry-run --help --version -h -n -v'
+)
+
 for ((i = 0; i < ${#cases[@]}; i += 2)); do
-    for shell in bash fish; do
-        check "$shell" "${cases[i]}" "${cases[i + 1]}"
+    line=${cases[i]}
+    for shell in bash fish zsh; do
+        want=${cases[i + 1]}
+        if [[ $shell == zsh && ${zsh_want[$line]+set} ]]; then
+            want=${zsh_want[$line]}
+        fi
+        check "$shell" "$line" "$want"
     done
 done
-
-if zsh -n "$dir/_env-exec"; then
-    echo 'ok    zsh  _env-exec parses'
-else
-    status=1
-fi
 
 exit $status
