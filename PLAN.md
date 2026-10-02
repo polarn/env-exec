@@ -1,19 +1,12 @@
 # PLAN.md
 
-## Do
-
-### 3. GitLab client cleanup
-- `gitlab.go:60`: `http.Client{}` has no timeout; set one (30s).
-- `gitlab.go:14-21`: `GitlabVariable` is only used in `getGitlabVariable` and four of its fields are unused; make it local and drop them.
-- `gitlab.go:69`: the ignored error on the error-body read loses only the body text (the status is already in the message). Fix in passing or leave.
-
 ## Optional, on demand
 
 ### 5. `-c` / `--config` flag
 `ENV_EXEC_YAML=.env-exec.dev.yaml` already selects a per-environment config; a flag only makes it discoverable.
 
 ### 6. Configurable GitLab host
-`gitlab.go:51` hardcodes `https://gitlab.com`. Add `defaults.gitlab.host` (or honour `CI_SERVER_URL`) when a self-hosted instance turns up.
+`gitlabURL` in `gitlab.go` hardcodes `https://gitlab.com`. Add `defaults.gitlab.host` (or honour `CI_SERVER_URL`) when a self-hosted instance turns up.
 
 ### 7. Mask secrets in `--dry-run`
 Dry-run prints every value in plaintext. Printing `<secret>` for `valueFrom` values by default, as `<file>` is printed for `asFile`, is simpler than a `--masked` flag, but it is a behaviour change: decide first.

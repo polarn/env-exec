@@ -5,20 +5,18 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/polarn/env-exec/internal/config"
 )
 
-type GitlabVariable struct {
-	Key              string `json:"key"`
-	Value            string `json:"value"`
-	VariableType     string `json:"variable_type"`
-	Protected        bool   `json:"protected"`
-	Masked           bool   `json:"masked"`
-	EnvironmentScope string `json:"environment_scope"`
-}
+var (
+	gitlabURL     = "https://gitlab.com"
+	gitlabTimeout = 30 * time.Second
+)
 
 // Provide fetches GitLab variables and adds them to the envVars map.
 func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]string) error {
@@ -31,12 +29,13 @@ func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]stri
 		return fmt.Errorf("GITLAB_TOKEN environment variable not set")
 	}
 
+	client := &http.Client{Timeout: gitlabTimeout}
 	for _, env := range cfg.Env {
 		if env.ValueFrom.GitlabVariableKeyRef.Key != "" {
 			key := env.ValueFrom.GitlabVariableKeyRef.Key
 			project := env.ValueFrom.GitlabVariableKeyRef.Project
 
-			value, err := getGitlabVariable(gitlabToken, key, project)
+			value, err := getGitlabVariable(client, gitlabToken, key, project)
 			if err != nil {
 				return fmt.Errorf("'%s': variable '%s' in project '%s': %w", env.Name, key, project, err)
 			}
@@ -47,8 +46,8 @@ func (p *GitlabProvider) Provide(cfg *config.RootConfig, envVars map[string]stri
 	return nil
 }
 
-func getGitlabVariable(gitlabToken, key, project string) (string, error) {
-	apiURL := fmt.Sprintf("https://gitlab.com/api/v4/projects/%s/variables/%s", project, key)
+func getGitlabVariable(client *http.Client, gitlabToken, key, project string) (string, error) {
+	apiURL := fmt.Sprintf("%s/api/v4/projects/%s/variables/%s", gitlabURL, url.PathEscape(project), url.PathEscape(key))
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
@@ -57,27 +56,26 @@ func getGitlabVariable(gitlabToken, key, project string) (string, error) {
 
 	req.Header.Set("PRIVATE-TOKEN", gitlabToken)
 
-	client := &http.Client{}
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("Failed to send request: %w", err)
+		return "", fmt.Errorf("failed to send request: %w", err)
 	}
 
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("Failed to get variable. Status: %s, Body: %s", resp.Status, string(bodyBytes))
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return "", fmt.Errorf("failed to get variable: %s (reading body: %w)", resp.Status, err)
+		}
+		return "", fmt.Errorf("failed to get variable: %s: %s", resp.Status, body)
 	}
 
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("Failed to read response body: %w", err)
+	var variable struct {
+		Value string `json:"value"`
 	}
-
-	var variable GitlabVariable
-	if err := json.Unmarshal(bodyBytes, &variable); err != nil {
-		return "", fmt.Errorf("Failed to unmarshal JSON response: %w", err)
+	if err := json.NewDecoder(resp.Body).Decode(&variable); err != nil {
+		return "", fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	return variable.Value, nil
