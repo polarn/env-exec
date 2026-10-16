@@ -24,7 +24,7 @@ go mod tidy
 completions/test.sh          # needs bash-completion 2.x, fish and zsh
 ```
 
-**Go version: 1.27** — keep in sync across `go.mod` and all GitHub workflows.
+**Go version: 1.26** — keep in sync across `go.mod` and all GitHub workflows.
 
 ## Architecture
 
